@@ -17,6 +17,9 @@ namespace FTPServer
         Binary
     }
 
+    /// <summary>
+    /// A Server that handles command and data connections for one client.
+    /// </summary>
     public class FTPServer
     {
         public const int PORT = 2121;
@@ -102,16 +105,34 @@ namespace FTPServer
         private TcpClient dataClient;
         private DataConnection dataCon;
 
+        /// <summary>
+        /// The IP address this server is running on.
+        /// </summary>
         public IPAddress LocalIP { get; private set; }
 
+        /// <summary>
+        /// The username provided by the connecting client.
+        /// </summary>
         public String Username { get; private set; }
 
+        /// <summary>
+        /// Whether the connected client has successfully logged in yet.
+        /// </summary>
         public bool UserLoggedIn { get; private set; }
 
+        /// <summary>
+        /// The current working directory from the client's point of view.
+        /// </summary>
         public String CurrentDirectory { get; private set; }
 
+        /// <summary>
+        /// The DataMode (binary or ASCII) in which files will be sent.
+        /// </summary>
         public DataMode DatMode { get; private set; }
 
+        /// <summary>
+        /// Construct an FTPServer and set its underlying data structures to defaults.
+        /// </summary>
         public FTPServer()
         {
             cmdListener = new TcpListener(IPAddress.Any, PORT);
@@ -128,21 +149,42 @@ namespace FTPServer
             CurrentDirectory = Directory.GetCurrentDirectory();
         }
 
+        /// <summary>
+        /// Destructor for the server.
+        /// </summary>
         ~FTPServer()
         {
-            cmdListener.Stop();
+            try
+            {
+                cmdListener.Stop();
+            }
+            catch (NullReferenceException nre)
+            {
+                //already closed, so we're fine
+            }
         }
 
+
+        /// <summary>
+        /// Allow this server to begin listening on the local address and an automatically determined port.
+        /// </summary>
         public void Start()
         {
             cmdListener.Start();
         }
 
+        /// <summary>
+        /// Whether this server is maintaining a connection with a client.
+        /// </summary>
+        /// <returns></returns>
         public bool HasClient()
         {
             return cmdClient != null;
         }
 
+        /// <summary>
+        /// Allow this server to accept incoming connections and read client commands.
+        /// </summary>
         public void Run()
         {
             // connect loop
@@ -171,6 +213,11 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// A sort of "bus" for parsing and handling any command strings received from the client.
+        /// Methods called from here will push responses out to the client as needed.
+        /// </summary>
+        /// <param name="cmd">The ClientCommand to parse and use to determine our next action.</param>
         private void HandleCommand(ClientCommand cmd)
         {
             Console.Write("<= {0}", cmd.Text);
@@ -226,6 +273,10 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// Prompt for a username and a password immediately after.
+        /// </summary>
+        /// <param name="cmd">A USER client command.</param>
         private void User(ClientCommand cmd)
         {
             if (UserLoggedIn)
@@ -247,6 +298,10 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// Take in a password and accept it no matter what it is.
+        /// </summary>
+        /// <param name="cmd">A PASS client command</param>
         private void Password(ClientCommand cmd)
         {
             if (UserLoggedIn)
@@ -261,6 +316,11 @@ namespace FTPServer
             UserLoggedIn = true;
         }
 
+        /// <summary>
+        /// List the files in the current working directory.
+        /// Whether this is through a passive or active data connection,
+        ///     this method will terminate the data connection after it concludes.
+        /// </summary>
         private void ListDir()
         {
             String files = String.Empty;
@@ -317,6 +377,10 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// Change the current working directory.
+        /// </summary>
+        /// <param name="cmd">A CWD client command.</param>
         private void Cd(ClientCommand cmd)
         {
             String cdStr;
@@ -343,6 +407,9 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// Push an IP and port to connect to for the client's passive mode.
+        /// </summary>
         private void Passive()
         {
             dataListener = new TcpListener(IPAddress.Any, 0);
@@ -362,6 +429,10 @@ namespace FTPServer
             dataClient = dataListener.AcceptTcpClient();
         }
 
+        /// <summary>
+        /// Connect to a client's given Ip/port for active mode.
+        /// </summary>
+        /// <param name="cmd">A PORT client command</param>
         private void Port(ClientCommand cmd)
         {
             if (cmd.Args.Length < 1)
@@ -402,6 +473,10 @@ namespace FTPServer
             SendMessage(SUCCESS, MSG_PORT_SUCCESS);
         }
 
+        /// <summary>
+        /// Change the file data transmission type.
+        /// </summary>
+        /// <param name="cmd">A MODE client command</param>
         private void ChangeType(ClientCommand cmd)
         {
             if (cmd.Args.Length < 1)
@@ -423,6 +498,11 @@ namespace FTPServer
             SendMessage(SUCCESS, String.Format(MSG_MODE_SWITCH, DatMode.ToString()));
         }
 
+        /// <summary>
+        /// Transfer a file to the client via an active or passive connection.
+        /// This method assumes either the PORT or PASV command has been received prior to calling.
+        /// </summary>
+        /// <param name="cmd">A RETR client command</param>
         private void Retrieve(ClientCommand cmd)
         {
             if (cmd.Args.Length < 1)
@@ -539,6 +619,11 @@ namespace FTPServer
             }
         }
 
+        /// <summary>
+        /// Send a message out to the client via the established command connection.
+        /// </summary>
+        /// <param name="code">The message code based on the RFC959 standard.</param>
+        /// <param name="msg">A message describing the nature/context of the code.</param>
         private void SendMessage(int code, String msg)
         {
             NetworkStream stream = cmdClient.GetStream();
@@ -548,21 +633,40 @@ namespace FTPServer
             Console.Write("=>  {0}", fullMsg);
         }
 
+        /// <summary>
+        /// Close the command client.
+        /// </summary>
         private void CloseClient()
         {
             cmdClient = null;
         }
 
+        /// <summary>
+        /// Whether the server has established a passive mode connection with
+        ///     the client in preparation to receive data.
+        /// </summary>
+        /// <returns>True if passive, false if active</returns>
         private bool IsPassive()
         {
             return (dataClient != null);
         }
 
+        /// <summary>
+        /// Await a client connection.
+        /// Done asyncronously to avoid unnecessary CPU work.
+        /// </summary>
+        /// <returns>The connected client wrapped in a Task object.</returns>
         async Task<TcpClient> AwaitClient()
         {
             return await cmdListener.AcceptTcpClientAsync();
         }
 
+        /// <summary>
+        /// Await a command from an established client. The string received can be used to
+        ///     construct a ClientCommand object.
+        /// Done asyncronously to avoid unnecessary CPU work.
+        /// </summary>
+        /// <returns>The command string wrapped in a Task object.</returns>
         async Task<String> AwaitCommand()
         {
             StreamReader reader = new StreamReader(cmdClient.GetStream(), Encoding.ASCII);

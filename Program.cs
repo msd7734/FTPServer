@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace FTPServer
 {
+    /// <summary>
+    /// The entry point for operating the FTPServer.
+    /// </summary>
     class Program
     {
         static void Main(string[] args)
