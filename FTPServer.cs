@@ -263,8 +263,17 @@ namespace FTPServer
 
         private void ListDir()
         {
-            // CurrentDirectory
-            String files = String.Join("\n", Directory.GetFileSystemEntries(CurrentDirectory))+"\r\n";
+            String files = String.Empty;
+
+            try
+            {
+                files = String.Join("\n", Directory.GetFileSystemEntries(CurrentDirectory)) + "\r\n";
+            }
+            catch (Exception e)
+            {
+                SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+            }
+
             SendMessage(INCOMING, MSG_DIR_INCOMING);
 
             if (IsPassive())
@@ -318,9 +327,14 @@ namespace FTPServer
 
             try
             {
-                String newDir = Path.Combine(CurrentDirectory, cdStr);
-                CurrentDirectory = newDir;
+                String newDir = Path.GetFullPath(Path.Combine(CurrentDirectory, cdStr));
+                if (!Directory.Exists(newDir))
+                {
+                    SendMessage(PERMISSION_DENIED, MSG_FAILED_TO_CHANGE);
+                    return;
+                }
 
+                CurrentDirectory = newDir;
                 SendMessage(DIR_CHANGE, MSG_DIR_CHANGE_SUCCESS);
             }
             catch (Exception e)
