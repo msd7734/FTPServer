@@ -10,6 +10,12 @@ using System.IO;
 
 namespace FTPServer
 {
+    public enum DataMode
+    {
+        ASCII,
+        Binary
+    }
+
     public class FTPServer
     {
         public const int PORT = 2121;
@@ -21,6 +27,7 @@ namespace FTPServer
 
         public static readonly int SUCCESS = 200;
         public static readonly string MSG_NOT_SUPPORTED = "Command not supported.";
+        public static readonly string MSG_MODE_SWITCH = "Switching to {0} mode.";
                        
         public static readonly int NEW_USER = 220;
         public static readonly string MSG_WELCOME = "Welcome to my FTP server. Please don't break anything.";
@@ -66,7 +73,8 @@ namespace FTPServer
             "PORT",
             "PASV",
             "QUIT",
-            "CWD"
+            "CWD",
+            "TYPE"
         };
 
         public const int CMD_USER = 0;
@@ -77,6 +85,7 @@ namespace FTPServer
         public const int CMD_PASV = 5;
         public const int CMD_QUIT = 6;
         public const int CMD_CWD = 7;
+        public const int CMD_TYPE = 8;
 
         #endregion
 
@@ -87,10 +96,6 @@ namespace FTPServer
         private TcpClient dataClient;
         private DataConnection dataCon;
 
-        private EventWaitHandle waitHandle = new EventWaitHandle(false, 
-            EventResetMode.AutoReset, 
-            "13200c5f8287cff9edfda4d5020091fe");
-
         public IPAddress LocalIP { get; private set; }
 
         public String Username { get; private set; }
@@ -98,6 +103,8 @@ namespace FTPServer
         public bool UserLoggedIn { get; private set; }
 
         public String CurrentDirectory { get; private set; }
+
+        public DataMode DatMode { get; private set; }
 
         public FTPServer()
         {
@@ -162,8 +169,6 @@ namespace FTPServer
         {
             Console.Write("<= {0}", cmd.Text);
 
-
-
             int cid = -1;
             for (int i = 0; i < COMMANDS.Length && cid == -1; ++i)
             {
@@ -203,6 +208,9 @@ namespace FTPServer
                     break;
                 case CMD_CWD:
                     Cd(cmd);
+                    break;
+                case CMD_TYPE:
+                    ChangeType(cmd);
                     break;
                 default:
                     SendMessage(SUCCESS, MSG_NOT_SUPPORTED);
@@ -288,6 +296,8 @@ namespace FTPServer
             Uri currentDir = new Uri(CurrentDirectory);
             Uri newDir = new Uri(currentDir, cdStr);
 
+            //TODO: Error checking
+
             CurrentDirectory = newDir.LocalPath;
 
             SendMessage(DIR_CHANGE, MSG_DIR_CHANGE_SUCCESS);
@@ -310,6 +320,58 @@ namespace FTPServer
 
             SendMessage(PASSIVE_MODE, String.Format(MSG_PASSIVE_MODE, ipParam));
             dataClient = dataListener.AcceptTcpClient();
+        }
+
+        private void ChangeType(ClientCommand cmd)
+        {
+            if (cmd.Args.Length < 1)
+            {
+                SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+                return;
+            }
+
+            String modeStr = cmd.Args[0];
+            if (modeStr.Equals("A", StringComparison.CurrentCultureIgnoreCase))
+            {
+                DatMode = DataMode.ASCII;
+            }
+            else
+            {
+                DatMode = DataMode.Binary;
+            }
+
+            SendMessage(SUCCESS, String.Format(MSG_MODE_SWITCH, DatMode.ToString()));
+        }
+
+        private void Retrieve(ClientCommand cmd)
+        {
+            /*
+            if (IsPassive())
+            {
+                try
+                {
+                    NetworkStream stream = dataClient.GetStream();
+                    byte[] b = Encoding.ASCII.GetBytes(files);
+                    stream.Write(b, 0, b.Length);
+                    SendMessage(DIR_SEND, MSG_DIR_SEND_OK);
+                }
+                catch (Exception e)
+                {
+                    SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+                }
+                finally
+                {
+                    dataClient.Close();
+                    dataListener.Stop();
+                    dataClient = null;
+                    dataListener = null;
+                }
+            }
+            else
+            {
+                // implicitly active
+            }
+             * */
         }
 
         private void SendMessage(int code, String msg)
