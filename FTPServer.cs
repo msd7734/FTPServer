@@ -22,8 +22,9 @@ namespace FTPServer
 
         #region Message Constants
 
-        public static readonly int DIR_INCOMING = 150;
+        public static readonly int INCOMING = 150;
         public static readonly string MSG_DIR_INCOMING = "Here comes the directory listing.";
+        public static readonly string MSG_FILE_INCOMING = "Opening {0} mode data connection for {1} ({2} bytes).";
 
         public static readonly int SUCCESS = 200;
         public static readonly string MSG_NOT_SUPPORTED = "Command not supported.";
@@ -35,8 +36,9 @@ namespace FTPServer
         public static readonly int GOODBYE = 221;
         public static readonly string MSG_GOODBYE = "Goodbye.";
 
-        public static readonly int DIR_SEND = 226;
+        public static readonly int GOOD_SEND = 226;
         public static readonly string MSG_DIR_SEND_OK = "Directory send OK.";
+        public static readonly string MSG_FILE_SEND_OK = "Transfer complete.";
 
         public static readonly int PASSIVE_MODE = 227;
         public static readonly string MSG_PASSIVE_MODE = "Entering Passive Mode {0}.";              
@@ -59,6 +61,7 @@ namespace FTPServer
                       
         public static readonly int PERMISSION_DENIED = 550;
         public static readonly string MSG_ACTION_NOT_TAKEN = "The requested action could not be completed.";
+        public static readonly string MSG_FAILED_TO_OPEN = "Failed to open file.";
 
         #endregion
 
@@ -193,6 +196,7 @@ namespace FTPServer
                     Password(cmd);
                     break;
                 case CMD_RETR:
+                    Retrieve(cmd);
                     break;
                 case CMD_LIST:
                     ListDir();
@@ -201,6 +205,7 @@ namespace FTPServer
                     Passive();
                     break;
                 case CMD_PORT:
+                    Port(cmd);
                     break;
                 case CMD_QUIT:
                     SendMessage(GOODBYE, MSG_GOODBYE);
@@ -257,7 +262,7 @@ namespace FTPServer
         {
             // CurrentDirectory
             String files = String.Join("\n", Directory.GetFileSystemEntries(CurrentDirectory))+"\r\n";
-            SendMessage(DIR_INCOMING, MSG_DIR_INCOMING);
+            SendMessage(INCOMING, MSG_DIR_INCOMING);
             if (IsPassive())
             {
                 try
@@ -265,7 +270,7 @@ namespace FTPServer
                     NetworkStream stream = dataClient.GetStream();
                     byte[] b = Encoding.ASCII.GetBytes(files);
                     stream.Write(b, 0, b.Length);
-                    SendMessage(DIR_SEND, MSG_DIR_SEND_OK);
+                    SendMessage(GOOD_SEND, MSG_DIR_SEND_OK);
                 }
                 catch (Exception e)
                 {
@@ -293,12 +298,9 @@ namespace FTPServer
             else
                 cdStr = cmd.Args[0];
 
-            Uri currentDir = new Uri(CurrentDirectory);
-            Uri newDir = new Uri(currentDir, cdStr);
-
-            //TODO: Error checking
-
-            CurrentDirectory = newDir.LocalPath;
+            // TODO: Error checking
+            String newDir = Path.Combine(CurrentDirectory, cdStr);
+            CurrentDirectory = newDir;
 
             SendMessage(DIR_CHANGE, MSG_DIR_CHANGE_SUCCESS);
         }
@@ -320,6 +322,11 @@ namespace FTPServer
 
             SendMessage(PASSIVE_MODE, String.Format(MSG_PASSIVE_MODE, ipParam));
             dataClient = dataListener.AcceptTcpClient();
+        }
+
+        private void Port(ClientCommand cmd)
+        {
+
         }
 
         private void ChangeType(ClientCommand cmd)
@@ -345,15 +352,56 @@ namespace FTPServer
 
         private void Retrieve(ClientCommand cmd)
         {
-            /*
+            if (cmd.Args.Length < 1)
+            {
+                SendMessage(PERMISSION_DENIED, MSG_FAILED_TO_OPEN);
+                return;
+            }
+
             if (IsPassive())
             {
                 try
                 {
-                    NetworkStream stream = dataClient.GetStream();
-                    byte[] b = Encoding.ASCII.GetBytes(files);
-                    stream.Write(b, 0, b.Length);
-                    SendMessage(DIR_SEND, MSG_DIR_SEND_OK);
+                    String filePath = Path.Combine(CurrentDirectory, cmd.Args[0]);
+
+                    FileInfo finfo = new FileInfo(filePath);
+                    SendMessage(INCOMING, String.Format(MSG_FILE_INCOMING, DatMode.ToString(), Path.GetFileName(filePath), finfo.Length));
+
+                    // transmit ASCII
+                    if (DatMode == DataMode.ASCII)
+                    {
+                        using (StreamReader reader = new StreamReader(File.OpenRead(filePath)))
+                        {
+                            NetworkStream stream = dataClient.GetStream();
+                            String line;
+
+                            while ((line = reader.ReadLine()) != null)
+                            {
+                                // append line endings
+                                byte[] b = Encoding.ASCII.GetBytes(line+"\r\n");
+                                stream.Write(b, 0, b.Length);
+                            }
+                        
+                        }
+                    }
+                    // transmit binary
+                    else 
+                    {
+                        using (BinaryReader reader = new BinaryReader(File.OpenRead(filePath)))
+                        {
+                            NetworkStream stream = dataClient.GetStream();
+                            byte[] buf = new byte[0x40000];
+                            int bytesRead = 0;
+                            do
+                            {
+                                Array.Clear(buf, 0, buf.Length);
+                                bytesRead = reader.Read(buf, 0, buf.Length);
+                                stream.Write(buf, 0, bytesRead);
+                            }
+                            while (bytesRead != 0);
+                        }
+                    }
+                    SendMessage(GOOD_SEND, MSG_FILE_SEND_OK);
                 }
                 catch (Exception e)
                 {
@@ -371,7 +419,6 @@ namespace FTPServer
             {
                 // implicitly active
             }
-             * */
         }
 
         private void SendMessage(int code, String msg)
