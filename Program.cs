@@ -15,7 +15,16 @@ namespace FTPServer
             Console.WriteLine("Starting server.");
             server.Start();
             Console.WriteLine("Awaiting connections on {0}", server.LocalIP.ToString());
-            server.Run();
+            try
+            {
+                server.Run();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("!! The server closed unexpectedly due to an unhandled error.");
+                Console.Error.WriteLine(e.Message);
+            }
+            
         }
     }
 }

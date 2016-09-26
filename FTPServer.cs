@@ -544,18 +544,6 @@ namespace FTPServer
             return (dataClient != null);
         }
 
-        /*
-        private bool IsPassive()
-        {
-            if (dataListener == null)
-                return true;
-            else if (dataListener != null && dataCon != null)
-                throw new Exception("Mismatched passive/active states.");
-            else
-                return false;
-        }
-        */
-
         async Task<TcpClient> AwaitClient()
         {
             return await cmdListener.AcceptTcpClientAsync();
