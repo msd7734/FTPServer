@@ -62,6 +62,7 @@ namespace FTPServer
         public static readonly int PERMISSION_DENIED = 550;
         public static readonly string MSG_ACTION_NOT_TAKEN = "The requested action could not be completed.";
         public static readonly string MSG_FAILED_TO_OPEN = "Failed to open file.";
+        public static readonly string MSG_FAILED_TO_CHANGE = "Failed to change directory.";
 
         #endregion
 
@@ -298,11 +299,17 @@ namespace FTPServer
             else
                 cdStr = cmd.Args[0];
 
-            // TODO: Error checking
-            String newDir = Path.Combine(CurrentDirectory, cdStr);
-            CurrentDirectory = newDir;
+            try
+            {
+                String newDir = Path.Combine(CurrentDirectory, cdStr);
+                CurrentDirectory = newDir;
 
-            SendMessage(DIR_CHANGE, MSG_DIR_CHANGE_SUCCESS);
+                SendMessage(DIR_CHANGE, MSG_DIR_CHANGE_SUCCESS);
+            }
+            catch (Exception e)
+            {
+                SendMessage(PERMISSION_DENIED, MSG_FAILED_TO_CHANGE);
+            }
         }
 
         private void Passive()
