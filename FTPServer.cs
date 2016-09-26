@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
@@ -29,6 +30,7 @@ namespace FTPServer
         public static readonly int SUCCESS = 200;
         public static readonly string MSG_NOT_SUPPORTED = "Command not supported.";
         public static readonly string MSG_MODE_SWITCH = "Switching to {0} mode.";
+        public static readonly string MSG_PORT_SUCCESS = "Port command successful.";
                        
         public static readonly int NEW_USER = 220;
         public static readonly string MSG_WELCOME = "Welcome to my FTP server. Please don't break anything.";
@@ -264,6 +266,7 @@ namespace FTPServer
             // CurrentDirectory
             String files = String.Join("\n", Directory.GetFileSystemEntries(CurrentDirectory))+"\r\n";
             SendMessage(INCOMING, MSG_DIR_INCOMING);
+
             if (IsPassive())
             {
                 try
@@ -288,6 +291,20 @@ namespace FTPServer
             else
             {
                 // implicitly active
+                try
+                {
+                    dataCon.SendData(files);
+                    SendMessage(GOOD_SEND, MSG_DIR_SEND_OK);
+                }
+                catch (Exception e)
+                {
+                    SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+                }
+                finally
+                {
+                    dataCon.Close();
+                    dataCon = null;
+                }
             }
         }
 
@@ -333,7 +350,42 @@ namespace FTPServer
 
         private void Port(ClientCommand cmd)
         {
+            if (cmd.Args.Length < 1)
+            {
+                SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+                return;
+            }
 
+            if (dataCon != null && dataCon.IsConnected())
+            {
+                dataCon.Close();
+                dataCon = null;
+            }
+
+
+            String targetRegex = @"(\d{1,3},){5}\d{1,3}";
+            Match m = Regex.Match(cmd.Text, targetRegex);
+
+            if (!m.Success)
+            {
+                Console.Error.Write(
+                    "Attempted to connect in active mode but client seems to have given no connection information:\n{0}",
+                    cmd.Text
+                );
+                return;
+            }
+
+            String target = m.Value;
+            String[] byteStrs = target.Split(',');
+            String ipStr = String.Join<String>(".", byteStrs.Take<String>(4));
+            System.Net.IPAddress IP = System.Net.IPAddress.Parse(ipStr);
+
+            String[] octetStrs = { byteStrs[byteStrs.Length - 2], byteStrs[byteStrs.Length - 1] };
+            int port = (Int32.Parse(octetStrs[0]) * 256) + Int32.Parse(octetStrs[1]);
+
+            dataCon = new DataConnection(IP, port);
+
+            SendMessage(SUCCESS, MSG_PORT_SUCCESS);
         }
 
         private void ChangeType(ClientCommand cmd)
