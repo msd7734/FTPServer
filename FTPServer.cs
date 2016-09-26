@@ -417,15 +417,15 @@ namespace FTPServer
                 return;
             }
 
+            String filePath = Path.Combine(CurrentDirectory, cmd.Args[0]);
+
+            FileInfo finfo = new FileInfo(filePath);
+            SendMessage(INCOMING, String.Format(MSG_FILE_INCOMING, DatMode.ToString(), Path.GetFileName(filePath), finfo.Length));
+
             if (IsPassive())
             {
                 try
                 {
-                    String filePath = Path.Combine(CurrentDirectory, cmd.Args[0]);
-
-                    FileInfo finfo = new FileInfo(filePath);
-                    SendMessage(INCOMING, String.Format(MSG_FILE_INCOMING, DatMode.ToString(), Path.GetFileName(filePath), finfo.Length));
-
                     // transmit ASCII
                     if (DatMode == DataMode.ASCII)
                     {
@@ -477,6 +477,51 @@ namespace FTPServer
             else
             {
                 // implicitly active
+                try
+                {
+                    // transmit ASCII
+                    if (DatMode == DataMode.ASCII)
+                    {
+                        using (StreamReader reader = new StreamReader(File.OpenRead(filePath)))
+                        {
+                            String line;
+                            while ((line = reader.ReadLine()) != null)
+                            {
+                                // append line endings
+                                dataCon.SendData(line + "\r\n");
+                            }
+
+                        }
+                    }
+                    // transmit binary
+                    else
+                    {
+                        using (BinaryReader reader = new BinaryReader(File.OpenRead(filePath)))
+                        {
+                            byte[] buf = new byte[0x40000];
+                            int bytesRead = 0;
+                            do
+                            {
+                                Array.Clear(buf, 0, buf.Length);
+                                bytesRead = reader.Read(buf, 0, buf.Length);
+                                dataCon.SendData(buf, bytesRead);
+                            }
+                            while (bytesRead != 0);
+                        }
+                    }
+
+                    SendMessage(GOOD_SEND, MSG_FILE_SEND_OK);
+                }
+                catch (Exception e)
+                {
+                    SendMessage(PERMISSION_DENIED, MSG_ACTION_NOT_TAKEN);
+                }
+                finally
+                {
+                    dataCon.Close();
+                    dataCon = null;
+                }
+
             }
         }
 

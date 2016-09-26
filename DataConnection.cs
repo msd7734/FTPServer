@@ -33,13 +33,14 @@ namespace FTPServer
 
         public void SendData(String msg)
         {
-            SendData( Encoding.ASCII.GetBytes(msg) );
+            byte[] b = Encoding.ASCII.GetBytes(msg);
+            SendData(b, b.Length);
         }
 
-        public void SendData(byte[] b)
+        public void SendData(byte[] b, int bytesToWrite)
         {
             NetworkStream stream = client.GetStream();
-            stream.Write(b, 0, b.Length);
+            stream.Write(b, 0, bytesToWrite);
             Console.WriteLine("=> Sent {0} bytes to client.", b.Length);
         }
 
